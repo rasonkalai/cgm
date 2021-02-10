@@ -4,41 +4,41 @@ import numpy as np
 import matplotlib.pyplot as plt
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
-    """
-        cgmquantify package
-        Description:
-        The cgmquantify package is a comprehensive library for computing metrics from continuous glucose monitors.
+"""
+    cgmquantify package
+    Description:
+    The cgmquantify package is a comprehensive library for computing metrics from continuous glucose monitors.
 
-        Requirements:
-        pandas, datetime, numpy, matplotlib, statsmodels
+    Requirements:
+    pandas, datetime, numpy, matplotlib, statsmodels
 
-        Functions:
-        importdexcom(): Imports data from Dexcom continuous glucose monitor devices
-        interdaycv(): Computes and returns the interday coefficient of variation of glucose
-        interdaysd(): Computes and returns the interday standard deviation of glucose
-        intradaycv(): Computes and returns the intraday coefficient of variation of glucose 
-        intradaysd(): Computes and returns the intraday standard deviation of glucose 
-        TIR(): Computes and returns the time in range
-        TOR(): Computes and returns the time outside range
-        PIR(): Computes and returns the percent time in range
-        POR(): Computes and returns the percent time outside range
-        MGE(): Computes and returns the mean of glucose outside specified range
-        MGN(): Computes and returns the mean of glucose inside specified range
-        MAGE(): Computes and returns the mean amplitude of glucose excursions
-        J_index(): Computes and returns the J-index
-        LBGI(): Computes and returns the low blood glucose index
-        HBGI(): Computes and returns the high blood glucose index
-        ADRR(): Computes and returns the average daily risk range, an assessment of total daily glucose variations within risk space
-        MODD(): Computes and returns the mean of daily differences. Examines mean of value + value 24 hours before
-        CONGA24(): Computes and returns the continuous overall net glycemic action over 24 hours
-        GMI(): Computes and returns the glucose management index
-        eA1c(): Computes and returns the American Diabetes Association estimated HbA1c
-        summary(): Computes and returns glucose summary metrics, including interday mean glucose, interday median glucose, interday minimum glucose, interday maximum glucose, interday first quartile glucose, and interday third quartile glucose
-        plotglucosesd(): Plots glucose with specified standard deviation lines
-        plotglucosebounds(): Plots glucose with user-defined boundaries
-        plotglucosesmooth(): Plots smoothed glucose plot (with LOWESS smoothing)
-                
-    """
+    Functions:
+    importdexcom(): Imports data from Dexcom continuous glucose monitor devices
+    interdaycv(): Computes and returns the interday coefficient of variation of glucose
+    interdaysd(): Computes and returns the interday standard deviation of glucose
+    intradaycv(): Computes and returns the intraday coefficient of variation of glucose 
+    intradaysd(): Computes and returns the intraday standard deviation of glucose 
+    TIR(): Computes and returns the time in range
+    TOR(): Computes and returns the time outside range
+    PIR(): Computes and returns the percent time in range
+    POR(): Computes and returns the percent time outside range
+    MGE(): Computes and returns the mean of glucose outside specified range
+    MGN(): Computes and returns the mean of glucose inside specified range
+    MAGE(): Computes and returns the mean amplitude of glucose excursions
+    J_index(): Computes and returns the J-index
+    LBGI(): Computes and returns the low blood glucose index
+    HBGI(): Computes and returns the high blood glucose index
+    ADRR(): Computes and returns the average daily risk range, an assessment of total daily glucose variations within risk space
+    MODD(): Computes and returns the mean of daily differences. Examines mean of value + value 24 hours before
+    CONGA24(): Computes and returns the continuous overall net glycemic action over 24 hours
+    GMI(): Computes and returns the glucose management index
+    eA1c(): Computes and returns the American Diabetes Association estimated HbA1c
+    summary(): Computes and returns glucose summary metrics, including interday mean glucose, interday median glucose, interday minimum glucose, interday maximum glucose, interday first quartile glucose, and interday third quartile glucose
+    plotglucosesd(): Plots glucose with specified standard deviation lines
+    plotglucosebounds(): Plots glucose with user-defined boundaries
+    plotglucosesmooth(): Plots smoothed glucose plot (with LOWESS smoothing)
+            
+"""
 
 def importdexcom(filename):
     """
@@ -46,16 +46,35 @@ def importdexcom(filename):
         Args:
             filename (String): path to file
         Returns:
-            (pd.DataFrame): dataframe of data with DateTime, Time and Glucose columns
+            (pd.DataFrame): dataframe of data with Time, Glucose, and Day columns
     """
     data = pd.read_csv(filename) 
     df = pd.DataFrame()
     df['Time'] = data['Timestamp (YYYY-MM-DDThh:mm:ss)']
     df['Glucose'] = pd.to_numeric(data['Glucose Value (mg/dL)'])
     df.drop(df.index[:12], inplace=True)
-    df['Time'] =  pd.to_datetime(df['Time'], format='%Y-%m-%dT%H:%M:%S')
+    df['Time'] = pd.to_datetime(df['Time'], format='%Y-%m-%dT%H:%M:%S')
     df['Day'] = df['Time'].dt.date
     df = df.reset_index()
+    return df
+
+
+def importfreestylelibre(filename):
+    """
+        Imports data from Abbott FreeStyle Libre continuous glucose monitor devices
+        Args:
+            filename (String): path to file
+        Returns:
+            (pd.DataFrame): dataframe of data with Time, Glucose, and Day columns
+    """
+    data = pd.read_csv(filename, header=1, parse_dates=['Device Timestamp'])
+    df = pd.DataFrame()
+
+    historic_id = 0
+
+    df['Time'] = data.loc[data['Record Type'] == historic_id, 'Device Timestamp']
+    df['Glucose'] = pd.to_numeric(data.loc[data['Record Type'] == historic_id, 'Historic Glucose mg/dL'])
+    df['Day'] = df['Time'].dt.date
     return df
 
 
@@ -235,72 +254,72 @@ def MAGE(df, std=1):
             
     """
         
-        #extracting glucose values and incdices
-        glucose = df['Glucose'].tolist()
-        ix = [1*i for i in range(len(glucose))]
-        stdev = std
-        
-        # local minima & maxima
-        a = np.diff(np.sign(np.diff(glucose))).nonzero()[0] + 1      
-        # local min
-        valleys = (np.diff(np.sign(np.diff(glucose))) > 0).nonzero()[0] + 1 
-        # local max
-        peaks = (np.diff(np.sign(np.diff(glucose))) < 0).nonzero()[0] + 1         
-        # +1 -- diff reduces original index number
+    #extracting glucose values and incdices
+    glucose = df['Glucose'].tolist()
+    ix = [1*i for i in range(len(glucose))]
+    stdev = std
 
-        #store local minima and maxima -> identify + remove turning points
-        excursion_points = pd.DataFrame(columns=['Index', 'Time', 'Glucose', 'Type'])
-        k=0
-        for i in range(len(peaks)):
-            excursion_points.loc[k] = [peaks[i]] + [df['Time'][k]] + [df['Glucose'][k]] + ["P"]
-            k+=1
+    # local minima & maxima
+    a = np.diff(np.sign(np.diff(glucose))).nonzero()[0] + 1
+    # local min
+    valleys = (np.diff(np.sign(np.diff(glucose))) > 0).nonzero()[0] + 1
+    # local max
+    peaks = (np.diff(np.sign(np.diff(glucose))) < 0).nonzero()[0] + 1
+    # +1 -- diff reduces original index number
 
-        for i in range(len(valleys)):
-            excursion_points.loc[k] = [valleys[i]] + [df['Time'][k]] + [df['Glucose'][k]] + ["V"]
-            k+=1
+    #store local minima and maxima -> identify + remove turning points
+    excursion_points = pd.DataFrame(columns=['Index', 'Time', 'Glucose', 'Type'])
+    k=0
+    for i in range(len(peaks)):
+        excursion_points.loc[k] = [peaks[i]] + [df['Time'][k]] + [df['Glucose'][k]] + ["P"]
+        k+=1
 
-        excursion_points = excursion_points.sort_values(by=['Index'])
-        excursion_points = excursion_points.reset_index(drop=True)
+    for i in range(len(valleys)):
+        excursion_points.loc[k] = [valleys[i]] + [df['Time'][k]] + [df['Glucose'][k]] + ["V"]
+        k+=1
+
+    excursion_points = excursion_points.sort_values(by=['Index'])
+    excursion_points = excursion_points.reset_index(drop=True)
 
 
-        # selecting turning points
-        turning_points = pd.DataFrame(columns=['Index', 'Time', 'Glucose', 'Type'])
-        k=0
-        for i in range(stdev,len(excursion_points.Index)-stdev):
-            positions = [i-stdev,i,i+stdev]
-            for j in range(0,len(positions)-1):
-                if(excursion_points.Type[positions[j]] == excursion_points.Type[positions[j+1]]):
-                    if(excursion_points.Type[positions[j]]=='P'):
-                        if excursion_points.Glucose[positions[j]]>=excursion_points.Glucose[positions[j+1]]:
-                            turning_points.loc[k] = excursion_points.loc[positions[j+1]]
-                            k+=1
-                        else:
-                            turning_points.loc[k] = excursion_points.loc[positions[j+1]]
-                            k+=1
+    # selecting turning points
+    turning_points = pd.DataFrame(columns=['Index', 'Time', 'Glucose', 'Type'])
+    k=0
+    for i in range(stdev,len(excursion_points.Index)-stdev):
+        positions = [i-stdev,i,i+stdev]
+        for j in range(0,len(positions)-1):
+            if(excursion_points.Type[positions[j]] == excursion_points.Type[positions[j+1]]):
+                if(excursion_points.Type[positions[j]]=='P'):
+                    if excursion_points.Glucose[positions[j]]>=excursion_points.Glucose[positions[j+1]]:
+                        turning_points.loc[k] = excursion_points.loc[positions[j+1]]
+                        k+=1
                     else:
-                        if excursion_points.Glucose[positions[j]]<=excursion_points.Glucose[positions[j+1]]:
-                            turning_points.loc[k] = excursion_points.loc[positions[j]]
-                            k+=1
-                        else:
-                            turning_points.loc[k] = excursion_points.loc[positions[j+1]]
-                            k+=1
+                        turning_points.loc[k] = excursion_points.loc[positions[j+1]]
+                        k+=1
+                else:
+                    if excursion_points.Glucose[positions[j]]<=excursion_points.Glucose[positions[j+1]]:
+                        turning_points.loc[k] = excursion_points.loc[positions[j]]
+                        k+=1
+                    else:
+                        turning_points.loc[k] = excursion_points.loc[positions[j+1]]
+                        k+=1
 
-        if len(turning_points.index)<10:
-            turning_points = excursion_points.copy()
-            excursion_count = len(excursion_points.index)
-        else:
-            excursion_count = len(excursion_points.index)/2
+    if len(turning_points.index)<10:
+        turning_points = excursion_points.copy()
+        excursion_count = len(excursion_points.index)
+    else:
+        excursion_count = len(excursion_points.index)/2
 
 
-        turning_points = turning_points.drop_duplicates(subset= "Index", keep= "first")
-        turning_points=turning_points.reset_index(drop=True)
-        excursion_points = excursion_points[excursion_points.Index.isin(turning_points.Index) == False]
-        excursion_points = excursion_points.reset_index(drop=True)
+    turning_points = turning_points.drop_duplicates(subset= "Index", keep= "first")
+    turning_points=turning_points.reset_index(drop=True)
+    excursion_points = excursion_points[excursion_points.Index.isin(turning_points.Index) == False]
+    excursion_points = excursion_points.reset_index(drop=True)
 
-        # calculating MAGE
-        mage = turning_points.Glucose.sum()/excursion_count
-        
-        return round(mage,3)
+    # calculating MAGE
+    mage = turning_points.Glucose.sum()/excursion_count
+
+    return round(mage,3)
 
 
 
